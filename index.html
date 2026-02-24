@@ -34554,14 +34554,53 @@ const WQ_SHOPIFY_BRIDGE = (() => {
   }
 
   /**
-   * Get all items from the Nexus CartStore.
+   * Get all items from the Nexus scene (placed components on the breadboard).
+   * Reads sceneManager.entities[] and cross-references PRODUCT_CATALOG
+   * to resolve productId → sku, name, price.
+   * Aggregates duplicate SKUs into quantity counts.
    * @returns {Array} Cart items with productId, name, sku, qty, price
    */
   function getCartItems() {
-    if (!window.CartStore || !Array.isArray(window.CartStore.items)) {
-      return [];
+    /* Primary: read placed entities from the 3D scene */
+    if (window.sceneManager && Array.isArray(window.sceneManager.entities)) {
+      const itemMap = {}; /* sku → { sku, name, price, qty, productId } */
+
+      for (const entity of window.sceneManager.entities) {
+        const productId = entity.userData && entity.userData.productId;
+        if (!productId) continue;
+
+        /* Look up product in PRODUCT_CATALOG (global in Nexus) */
+        let product = null;
+        if (typeof PRODUCT_CATALOG !== 'undefined') {
+          for (const cat of Object.values(PRODUCT_CATALOG)) {
+            const prods = cat.products || cat;
+            if (Array.isArray(prods)) {
+              const found = prods.find(p => p.id === productId);
+              if (found) { product = found; break; }
+            }
+          }
+        }
+
+        const sku = product ? product.sku : productId;
+        const name = product ? product.name : (entity.userData.label || productId);
+        const price = product ? product.price : 0;
+
+        if (itemMap[sku]) {
+          itemMap[sku].qty += 1;
+        } else {
+          itemMap[sku] = { sku, name, price, qty: 1, productId };
+        }
+      }
+
+      return Object.values(itemMap);
     }
-    return window.CartStore.items.filter(item => item.qty > 0);
+
+    /* Legacy fallback: CartStore (not used by current Nexus builds) */
+    if (window.CartStore && Array.isArray(window.CartStore.items)) {
+      return window.CartStore.items.filter(item => item.qty > 0);
+    }
+
+    return [];
   }
 
   /**
