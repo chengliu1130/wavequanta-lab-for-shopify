@@ -34445,9 +34445,10 @@
  *   - PRODUCT_CATALOG: product id → SKU mapping
  *
  * Cart integration paths:
- *   Plan A (primary):  /cart/VID:QTY,... URL (no CORS needed)
+ *   Plan A (PRIMARY):  /cart/VID:QTY,... URL (no CORS needed, default)
  *   Plan B (dormant):  PostMessage to parent (requires iframe + CORS)
- *   Plan C (primary):  ?lab_bom=BASE64 parameter on store URL
+ *   Plan C (backup):   ?lab_bom=BASE64 parameter on store URL
+ *                       (available via buildBomParam() but not default)
  *
  * @sprint 7 | Task 7.4, 7.5, 7.6
  */
@@ -34455,21 +34456,59 @@
 /* ── SKU Map placeholder — replaced at build/deploy time ── */
 /* Run generate-sku-map.py to populate this object */
 const WQ_SKU_MAP = {
-  "YIL-HYPR-1030-HP": 47472976199834,
-  "UFI-CM5-800-45": 47472976232602,
-  "LBT-PMF-980-5M": 47472976265370,
-  "LBT-KM200-M6": 47472976298138,
-  "STH-DSTMS-5X5": 47472976396442,
-  "LBT-SPDC-810": 47472977051802,
-  "FST-WIZZLER-3": 47472977084570,
-  "WQ-UFSPEC-KIT1": 47472977117338,
-  "PRI-BLAZE400HR": 47472977969306
+  "WQ-FL50-800": 47478224158874,
+  "WQ-FL10-800": 47478224191642,
+  "WQ-PS10-1064": 47478224257178,
+  "WQ-NS100-1064": 47478224289946,
+  "WQ-NS1-532": 47478224322714,
+  "WQ-CW5-532": 47478224355482,
+  "WQ-LF-50UV": 47478224388250,
+  "WQ-LB-100": 47478224453786,
+  "WQ-LS-75HD": 47478224486554,
+  "WQ-LZ-200IR": 47478224650394,
+  "WQ-MR-BB50": 47478224683162,
+  "WQ-MR-AU50": 47478224715930,
+  "WQ-CM-800-50": 47478224781466,
+  "WQ-CM-800-100": 47478224814234,
+  "WQ-CM-800-250": 47478224847002,
+  "WQ-CM-1030-50": 47478224879770,
+  "WQ-CM-1030-100": 47478224945306,
+  "WQ-CM-1030-250": 47478224978074,
+  "WQ-CM-1030-500": 47478225010842,
+  "WQ-ND-03": 47478225076378,
+  "WQ-ND-05": 47478225109146,
+  "WQ-ND-10": 47478225141914,
+  "WQ-ND-20": 47478225207450,
+  "WQ-ND-30": 47478225240218,
+  "WQ-ND-VAR": 47478225272986,
+  "WQ-CBS-5050": 47478225338522,
+  "WQ-PBS-9010": 47478225371290,
+  "WQ-PM-10W": 47478225404058,
+  "WQ-PM-100W": 47478225469594,
+  "WQ-OSC-1G": 47478225502362,
+  "WQ-OSC-4G": 47478225535130,
+  "WQ-OSC-20G": 47478225600666,
+  "WQ-PD-10NS": 47478225633434,
+  "WQ-PD-200PS": 47478225666202,
+  "WQ-PD-10PS": 47478225698970,
+  "WQ-AC-STD": 47478225764506,
+  "WQ-AC-FROG": 47478225797274,
+  "WQ-PP-COMP-01": 47478225830042,
+  "WQ-PS-4000": 47478225895578,
+  "WQ-PS-8000": 47478225928346,
+  "WQ-GP-600": 47478225961114,
+  "WQ-GP-1200": 47478225993882
 };
 
 const WQ_SHOPIFY_BRIDGE = (() => {
   'use strict';
 
-  /* ── Configuration ── */
+  /* ── Configuration ──
+   * NOTE: `storeUrl` is empty in source code but is replaced at build time
+   * by build-nexus-deploy.py with the actual store URL (e.g.,
+   * 'https://m17b0a-ez.myshopify.com'). The auto-init block at the bottom
+   * relies on this injection. See simulator/build-nexus-deploy.py.
+   */
   let storeUrl = 'https://m17b0a-ez.myshopify.com';
   let skuMap = {};
   let initialized = false;
@@ -34493,6 +34532,9 @@ const WQ_SHOPIFY_BRIDGE = (() => {
 
   /**
    * Resolve a Nexus SKU to a Shopify variant_id.
+   * Uses two-step lookup: exact match first (fast O(1)), then
+   * case-insensitive fallback (O(n)). This matches the approach
+   * used in wq-pdp-try-in-lab.liquid on the Shopify side.
    * @param {string} sku - Product SKU (e.g., "WQ-FL50-800")
    * @returns {number|null} Shopify variant_id or null if not mapped
    */
@@ -34500,10 +34542,10 @@ const WQ_SHOPIFY_BRIDGE = (() => {
     if (!sku) return null;
     const normalized = sku.trim().toUpperCase();
 
-    /* Direct match */
+    /* Step 1: Direct match (O(1) fast path) */
     if (skuMap[sku]) return skuMap[sku];
 
-    /* Case-insensitive match */
+    /* Step 2: Case-insensitive match (O(n) fallback) */
     for (const [key, value] of Object.entries(skuMap)) {
       if (key.toUpperCase() === normalized) return value;
     }
@@ -34538,7 +34580,10 @@ const WQ_SHOPIFY_BRIDGE = (() => {
   }
 
   /**
-   * Build a Base64-encoded BOM parameter for the lab_bom URL scheme.
+   * Build a Base64-encoded BOM parameter for the lab_bom URL scheme (Plan C).
+   * NOT used by default addToShopifyCart() — available as a backup method.
+   * The target URL opens the store homepage, which must have
+   * wq-virtual-lab-banner.liquid to detect and process the lab_bom param.
    * @param {Array} items - Array of { variant_id, quantity, sku }
    * @returns {string} URL with ?lab_bom=BASE64 parameter
    */
@@ -34603,7 +34648,8 @@ const WQ_SHOPIFY_BRIDGE = (() => {
 
   /**
    * Main action: add all CartStore items to the Shopify cart.
-   * Opens the cart URL in a new tab (Plan A) or uses lab_bom param (Plan C).
+   * Uses Plan A (/cart/VID:QTY URL) — opens in new tab, no CORS needed.
+   * Plan C (buildBomParam) is available as a public method but not used here.
    */
   function addToShopifyCart() {
     if (!storeUrl) {
