@@ -34510,6 +34510,7 @@ const WQ_SHOPIFY_BRIDGE = (() => {
    * relies on this injection. See simulator/build-nexus-deploy.py.
    */
   let storeUrl = 'https://m17b0a-ez.myshopify.com';
+  let devThemeId = '150826549402';   /* Set to '' for production; theme ID for dev preview */
   let skuMap = {};
   let initialized = false;
 
@@ -34517,15 +34518,18 @@ const WQ_SHOPIFY_BRIDGE = (() => {
    * Initialize the bridge with SKU map and store URL.
    * @param {Object} map - SKU→variant_id mapping { "WQ-FL50-800": 12345, ... }
    * @param {string} url - Shopify store URL (e.g., 'https://m17b0a-ez.myshopify.com')
+   * @param {string} [themeId] - Optional dev theme ID for preview_theme_id param
    */
-  function init(map, url) {
+  function init(map, url, themeId) {
     skuMap = map || WQ_SKU_MAP;
     storeUrl = (url || '').replace(/\/$/, '');
+    if (themeId !== undefined) devThemeId = themeId;
     initialized = true;
 
     const count = Object.keys(skuMap).length;
     console.log(`🔗 WQ Shopify Bridge: initialized with ${count} SKU mappings`);
     console.log(`🔗 WQ Shopify Bridge: store URL = ${storeUrl || '(not set)'}`);
+    if (devThemeId) console.log(`🔗 WQ Shopify Bridge: dev theme ID = ${devThemeId}`);
 
     injectCartButton();
   }
@@ -34615,7 +34619,8 @@ const WQ_SHOPIFY_BRIDGE = (() => {
       .map(item => `${item.variant_id}:${item.quantity}`);
 
     if (pairs.length === 0) return '';
-    return `${storeUrl}/cart/${pairs.join(',')}`;
+    const themeParam = devThemeId ? `?preview_theme_id=${devThemeId}` : '';
+    return `${storeUrl}/cart/${pairs.join(',')}${themeParam}`;
   }
 
   /**
@@ -34638,7 +34643,8 @@ const WQ_SHOPIFY_BRIDGE = (() => {
     };
 
     const encoded = btoa(JSON.stringify(bom));
-    return `${storeUrl}?lab_bom=${encoded}`;
+    const themeParam = devThemeId ? `&preview_theme_id=${devThemeId}` : '';
+    return `${storeUrl}?lab_bom=${encoded}${themeParam}`;
   }
 
   /**
