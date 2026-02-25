@@ -34445,10 +34445,12 @@
  *   - PRODUCT_CATALOG: product id → SKU mapping
  *
  * Cart integration paths:
- *   Plan A (PRIMARY):  /cart/VID:QTY,... URL (no CORS needed, default)
+ *   Plan A (legacy):   /cart/VID:QTY,... URL — DEPRECATED because Shopify's
+ *                       302 redirect strips ?preview_theme_id parameter
  *   Plan B (dormant):  PostMessage to parent (requires iframe + CORS)
- *   Plan C (backup):   ?lab_bom=BASE64 parameter on store URL
- *                       (available via buildBomParam() but not default)
+ *   Plan C (PRIMARY):  ?lab_bom=BASE64 parameter on store homepage URL
+ *                       Opens homepage with dev theme, wq-lab-bridge.js
+ *                       adds items via Ajax Cart API, then redirects to /cart
  *
  * @sprint 7 | Task 7.4, 7.5, 7.6
  */
@@ -34722,10 +34724,13 @@ const WQ_SHOPIFY_BRIDGE = (() => {
       showUnmappedWarning(unmapped);
     }
 
-    /* Plan A: Direct cart URL (most reliable, no CORS) */
-    const cartUrl = buildCartUrl(resolved);
+    /* Plan C: lab_bom parameter — opens Shopify homepage with dev theme,
+       then wq-lab-bridge.js on the Shopify side adds items via Ajax Cart API.
+       This avoids Shopify's /cart/VID:QTY 302 redirect which strips
+       the preview_theme_id parameter. */
+    const cartUrl = buildBomParam(resolved);
     if (cartUrl) {
-      console.log(`🔗 WQ Bridge: Opening cart URL with ${resolved.length} items`);
+      console.log(`🔗 WQ Bridge: Opening store with BOM (${resolved.length} items)`);
       console.log(`🔗 WQ Bridge: URL = ${cartUrl}`);
       window.open(cartUrl, '_blank');
       showBridgeToast(
